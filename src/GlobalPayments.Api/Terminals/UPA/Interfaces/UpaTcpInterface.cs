@@ -17,6 +17,8 @@ namespace GlobalPayments.Api.Terminals.UPA
         private readonly ILog _logger = LogManager.GetLogger(typeof(UpaTcpInterface));
         private readonly CancellationTokenSource _tokenSource;
 
+        private string _exception;
+
         public event MessageSentEventHandler OnMessageSent;
         public event MessageReceivedEventHandler OnMessageReceived;
 
@@ -104,8 +106,7 @@ namespace GlobalPayments.Api.Terminals.UPA
                                 await SendAckMessageToDevice(c);
                                 break;
                             case UpaMessageType.Error:
-                                var errorJson = $@"{{""id"": ""{requestId}"",""status"": ""Error"",""action"": {{""result_code"": ""Unexpected error from terminal.""}}}}";
-                                responseMessage = Encoding.UTF8.GetBytes(errorJson);
+                                responseMessage = FormatErrorResponse(requestId, "Unexpected error from terminal.");
                                 OnMessageSent?.Invoke($"Sending {UpaMessageType.Ack}...");
                                 await SendAckMessageToDevice(c);
                                 break;
@@ -132,23 +133,36 @@ namespace GlobalPayments.Api.Terminals.UPA
             client.Message -= ClientOnMessage();
 
             client.Dispose();
+            
+            if (responseMessage != null && responseMessage.Length > 0)
+                return responseMessage;
 
-            return responseMessage;
+            if (string.IsNullOrEmpty(_exception))
+                return null;
 
-            EventHandler<MessageEventArgs> ClientOnMessage()
+            return FormatErrorResponse(requestId, _exception);
+        }
+
+        private static byte[] FormatErrorResponse(string requestId, string errorMessage)
+        {
+            var errorJson = $@"{{""id"": ""{requestId}"",""status"": ""Error"",""action"": {{""result_code"": ""{errorMessage}""}}}}";
+            return Encoding.UTF8.GetBytes(errorJson);
+        }
+
+        private EventHandler<MessageEventArgs> ClientOnMessage()
+        {
+            return (s, a) =>
             {
-                return (s, a) =>
+                if (a.Exception == null)
                 {
-                    if (a.Exception == null)
-                    {
-                        _logger.Debug($"Tcp Client: {a.Message}");
-                    }
-                    else
-                    {
-                        _logger.Error($"Tcp Client: {a.Message}", a.Exception);
-                    }
-                };
-            }
+                    _logger.Debug($"Tcp Client: {a.Message}");
+                }
+                else
+                {
+                    _exception = a.Exception.Message;
+                    _logger.Error($"Tcp Client: {a.Message}", a.Exception);
+                }
+            };
         }
 
         private static byte[] TrimResponse(byte[] value)

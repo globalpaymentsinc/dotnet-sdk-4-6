@@ -90,7 +90,7 @@ namespace GlobalPayments.Api.Terminals.UPA
                 var timeoutTask = Task.Delay(connectTimeout);
                 if (await Task.WhenAny(connectTask, timeoutTask) == timeoutTask)
                 {
-                    Message?.Invoke(this, new MessageEventArgs("Connection timeout"));
+                    Message?.Invoke(this, new MessageEventArgs("Connection timeout", new Exception("Connection timeout")));
                     continue;
                 }
 
@@ -137,9 +137,9 @@ namespace GlobalPayments.Api.Terminals.UPA
                             Message?.Invoke(this, new MessageEventArgs("Connection reset remotely", ex));
                             readLength = -2;
                         }
-                        catch (ObjectDisposedException)
+                        catch (ObjectDisposedException ex)
                         {
-                            Message?.Invoke(this, new MessageEventArgs("Connection closed by client"));
+                            Message?.Invoke(this, new MessageEventArgs("Connection closed by client", ex));
                             readLength = -4;
                         }
                         catch (Exception ex)
@@ -152,7 +152,7 @@ namespace GlobalPayments.Api.Terminals.UPA
                         {
                             if (readLength == 0)
                             {
-                                Message?.Invoke(this, new MessageEventArgs("Connection closed remotely"));
+                                Message?.Invoke(this, new MessageEventArgs("Connection closed remotely", new Exception("Connection closed remotely")));
                             }
 
                             _closedTcs.TrySetResult(true);
